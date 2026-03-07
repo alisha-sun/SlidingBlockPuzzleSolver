@@ -1,10 +1,34 @@
 import java.util.Scanner;
-
+/**
+ * Solves a 4x4 sliding block puzzle.
+ *
+ * The algorithm focuses on one row or column at a time. After a
+ * row or column has been solved, the algorithm runs recursively
+ * on the remaining unsolved portion of the puzzle.
+ *
+ * States are explored using a priority queue ordered by the Manhattan
+ * distance of relevant tiles. Visited states are stored to prevent
+ * the algorithm from revisiting previously explored configurations.
+ * 
+ * (Originally implemented November 2025; documented and revised in March 2026)
+ * */
 public class SlidingBlockPuzzleSolver{
+	/**
+	 * Reads a 4x4 sliding block puzzle configuration, runs the solver,
+	 * then prints the sequence of moves it used to reach the solution.
+	 * 
+	 * The user can see the next move by pressing Enter.
+	 * 
+	 * Input format: Four lines containing four integers each, representing the 
+	 * puzzle rows. The empty tile is represented by a 0. The numbers from 1-15
+	 * should be used exactly once. Input is assumed to be valid.
+	 * */
+	final static int[][] solution = {{1,2,3,4},{5,6,7,8},{9,10,11,12},{13,14,15,0}};
+	final static int rows = 4;
+	final static int columns = 4;
+	
 	public static void main(String[] args){
 		Scanner input = new Scanner(System.in);
-		final int rows = 4;
-		final int columns = 4;
 		int[][] state = new int[rows][columns];
 		String s = "";
 		Scanner stringScanner;
@@ -13,34 +37,20 @@ public class SlidingBlockPuzzleSolver{
 			System.out.print("Enter row " + (i+1) + ": ");
 			s = input.nextLine();
 			stringScanner = new Scanner(s);
-			for (int j = 0; j<columns; j++){
+			for (int j = 0; j < columns; j++){
 				state[i][j] = stringScanner.nextInt();
 			}
 		}
-
-		System.out.println(stateToString(state,0,-1));
-		input.nextLine();
-		
-		int[][] solution = {{1,2,3,4},{5,6,7,8},{9,10,11,12},{13,14,15,0}};
 	
-		GameState start = new GameState();
-		start.state = state;
+		GameState start = new GameState(state, null, null, 0);
 		
-		StateQueueNode bottom = new StateQueueNode();
-		StateQueueNode top = new StateQueueNode();
-		bottom.value = start;
-		top.value = start;
-		top.next = bottom;
+		StateQueueNode top = new StateQueueNode(start);
 		
-		VisitedListNode newVisitedListHead = new VisitedListNode();
-		newVisitedListHead.value = stateToString(state,0,-1);
+		VisitedListNode visitedListHead = new VisitedListNode(start.stateToString(0,-1));
 		
-		bottom = move(bottom, top, solution, newVisitedListHead, 0, -1);
-		//System.out.print("\nexited");
-		
-		start = bottom.value;
+		start = move(top, visitedListHead, 0, -1); //starts with the first row
 		s = "";
-		//System.out.println("dfafdsaf "+start.parent);
+
 		while (start.parent != null){
 			s = "Move " + start.target + " " + start.dir + "\n" + s;
 			start = start.parent;
@@ -52,298 +62,105 @@ public class SlidingBlockPuzzleSolver{
 			input.nextLine();
 			System.out.print(stringScanner.nextLine());
 		}
+		stringScanner.close();
+		input.close();
 	}
 	
-	private static StateQueueNode move(StateQueueNode bottom, StateQueueNode top, int[][] solution, VisitedListNode visitedListHead, int currentRow, int currentColumn){
+	/**
+	 * The main solver algorithm.
+	 * Solves a 4x4 sliding block puzzle row-by-row and column-by-column.
+	 * @param top The top of the priority queue of game states to be searched
+	 * @param visitedListHead The head of the list of visited states
+	 * @param currentRow The row that is currently being solved (if currentRow <= currentColumn), or was solved in the previous recursion (if currentRow > currentColumn)
+	 * @param currentColumn The column that is currently being solved (if currentRow > currentColumn), or was solved in the previous recursion (if currentRow <= currentColumn)
+	 * @return The solved game state (GameState objects contain references to their parent state)
+	 * */
+	private static GameState move(StateQueueNode top, VisitedListNode visitedListHead, int currentRow, int currentColumn){
 		int c = currentColumn;
 		if (currentColumn < 0) {
 			c = 0;
 		}
 		
-		if (solvedRowAndColumn(top.value.state,solution,currentRow,currentColumn)){ //row/column solved already
-			System.out.println("Solved row" + currentRow + " with move NONE");
-			printContents(top.value.state);
-			if (currentColumn == 2){ //puzzle finished
+		if (top.value.solvedRowAndColumn(currentRow,currentColumn)){ //intended row/column already solved at beginning of function call
+			if (currentColumn == columns-1 -1){ //puzzle finished
 				top.value.end = true;
-				System.out.println("puzzle solved "+ top.value.end);
-				printContents(top.value.state);
-				return top;
+				return top.value;
 			}
 			else{
-				StateQueueNode newBottom = new StateQueueNode();
-				StateQueueNode newTop = new StateQueueNode();
-				newBottom.value = top.value;
-				newTop.value = top.value;
-				newTop.next = newBottom;
-				
-				VisitedListNode newVisitedListHead = new VisitedListNode();
-				StateQueueNode sol;
-				
-				if (currentRow <= currentColumn) {
-					newVisitedListHead.value = stateToString(top.value.state, currentRow+1, currentColumn);
-					sol = move(newBottom, newTop, solution, newVisitedListHead, currentRow+1, currentColumn);
-				}
-				else {
-					newVisitedListHead.value = stateToString(top.value.state, currentRow, currentColumn+1);
-					sol = move(newBottom, newTop, solution, newVisitedListHead, currentRow, currentColumn+1);
-				}
-				
-				if (sol != null && sol.value.end){
+				GameState sol = processNewState(top.value, currentRow, currentColumn);
+				if (sol != null){
 					return sol;
-				}
-				else {
-					System.out.println("Something went wrong. ");
-					System.out.println("Row: " + currentRow);
-					System.out.println("Column: " + currentColumn);
-					Scanner input = new Scanner(System.in);
-					input.nextLine();
 				}
 			}
 		}
 		
-		while (bottom != null){
+		while (true){
 			GameState current = top.value;
-			int[][] newValue;
+			int[][] newBoard;
 		
-			for (int i = currentRow; i <= 3; i++){ //ignore rows that have already been solved
-				for (int j = c; j <= 3; j++){ //ignore columns that have already been solved
+			for (int i = currentRow; i < rows; i++){ //ignore rows that have already been solved
+				for (int j = c; j < columns; j++){ //ignore columns that have already been solved
 					if (current.state[i][j] == 0){ //find empty tile
-						if (i != 3 && current.state[i+1][j] != current.target){ //move up; don't undo previous move
-							newValue = arrayCopy(current.state);
-							newValue[i][j] = newValue[i+1][j];
-							newValue[i+1][j] = 0;
+						if (i != rows-1){
+							newBoard = arrayCopy(current.state);
+							newBoard[i][j] = newBoard[i+1][j];
+							newBoard[i+1][j] = 0;
+							GameState newGameState = new GameState(newBoard,current,GameState.Directions.up,newBoard[i][j]);
 							
-							if (!visitedState(newValue,visitedListHead,currentRow,currentColumn)){
-								printContents(newValue);
-								System.out.println(currentRow);
-								
-								GameState newNode = new GameState();
-								newNode.state = newValue;
-								newNode.dir = "up";
-								newNode.target = newValue[i][j];
-								newNode.parent = current;
-
-								enqueueNode(top, newNode, currentRow, currentColumn);
-
-								if (solvedRowAndColumn(newValue,solution,currentRow,currentColumn)){
-									printContents(newNode.state);
-									if (currentColumn == 2){
-										newNode.end = true;
-										System.out.println("afdasdf/n"+ top.value.end);
-										printContents(top.value.state);
-										StateQueueNode sol = new StateQueueNode();
-										sol.value = newNode;
+							if (!visitedListHead.visitedState(newGameState,currentRow,currentColumn)){
+								top.enqueueNode(newGameState, currentRow, currentColumn);
+								if (newGameState.solvedRowAndColumn(currentRow,currentColumn)){
+									GameState sol = processNewState(newGameState, currentRow, currentColumn);
+									if (sol != null){
 										return sol;
-									}
-									else{	
-										StateQueueNode newBottom = new StateQueueNode();
-										StateQueueNode newTop = new StateQueueNode();
-										newBottom.value = newNode;
-										newTop.value = newNode;
-										newTop.next = newBottom;
-										
-										VisitedListNode newVisitedListHead = new VisitedListNode();
-										StateQueueNode sol;
-										
-										if (currentRow <= currentColumn) {
-											newVisitedListHead.value = stateToString(newNode.state, currentRow+1, currentColumn);
-											sol = move(newBottom, newTop, solution, newVisitedListHead, currentRow+1, currentColumn);
-										}
-										else {
-											newVisitedListHead.value = stateToString(newNode.state, currentRow, currentColumn+1);
-											sol = move(newBottom, newTop, solution, newVisitedListHead, currentRow, currentColumn+1);
-										}
-										
-										if (sol != null && sol.value.end){
-											return sol;
-										}
-										else {
-											System.out.println("Something went wrong. ");
-											System.out.println("Row: " + currentRow);
-											System.out.println("Column: " + currentColumn);
-											Scanner input = new Scanner(System.in);
-											input.nextLine();
-										}
 									}
 								}
 							}
 						}
-						if (i != currentRow && current.state[i-1][j] != current.target){ //move down
-							newValue = arrayCopy(current.state);
-							newValue[i][j] = newValue[i-1][j];
-							newValue[i-1][j] = 0;
+						if (i != currentRow){ //move down
+							newBoard = arrayCopy(current.state);
+							newBoard[i][j] = newBoard[i-1][j];
+							newBoard[i-1][j] = 0;
+							GameState newGameState = new GameState(newBoard,current,GameState.Directions.down,newBoard[i][j]);
 							
-							if (!visitedState(newValue,visitedListHead,currentRow,currentColumn)){
-								printContents(newValue);
-								System.out.println(currentRow);
-								
-								GameState newNode = new GameState();
-								newNode.state = newValue;
-								newNode.dir = "down";
-								newNode.target = newValue[i][j];
-								newNode.parent = current;
-
-								enqueueNode(top, newNode, currentRow, currentColumn);
-
-								if (solvedRowAndColumn(newValue,solution,currentRow,currentColumn)){
-									printContents(newNode.state);
-									if (currentColumn == 2){
-										newNode.end = true;
-										System.out.println("afdasdf/n"+ top.value.end);
-										printContents(top.value.state);
-										StateQueueNode sol = new StateQueueNode();
-										sol.value = newNode;
+							if (!visitedListHead.visitedState(newGameState,currentRow,currentColumn)){
+								top.enqueueNode(newGameState, currentRow, currentColumn);
+								if (newGameState.solvedRowAndColumn(currentRow,currentColumn)){
+									GameState sol = processNewState(newGameState, currentRow, currentColumn);
+									if (sol != null){
 										return sol;
-									}
-									else{	
-										StateQueueNode newBottom = new StateQueueNode();
-										StateQueueNode newTop = new StateQueueNode();
-										newBottom.value = newNode;
-										newTop.value = newNode;
-										newTop.next = newBottom;
-										
-										VisitedListNode newVisitedListHead = new VisitedListNode();
-										StateQueueNode sol;
-										
-										if (currentRow <= currentColumn) {
-											newVisitedListHead.value = stateToString(newNode.state, currentRow+1, currentColumn);
-											sol = move(newBottom, newTop, solution, newVisitedListHead, currentRow+1, currentColumn);
-										}
-										else {
-											newVisitedListHead.value = stateToString(newNode.state, currentRow, currentColumn+1);
-											sol = move(newBottom, newTop, solution, newVisitedListHead, currentRow, currentColumn+1);
-										}
-										
-										if (sol != null && sol.value.end){
-											return sol;
-										}
-										else {
-											System.out.println("Something went wrong. ");
-											System.out.println("Row: " + currentRow);
-											System.out.println("Column: " + currentColumn);
-											Scanner input = new Scanner(System.in);
-											input.nextLine();
-										}
 									}
 								}
 							}
 						}
-						if (j != current.state[0].length-1 && current.state[i][j+1] != current.target){ //move left
-							newValue = arrayCopy(current.state);
-							newValue[i][j] = newValue[i][j+1];
-							newValue[i][j+1] = 0;
+						if (j != columns-1){ //move left
+							newBoard = arrayCopy(current.state);
+							newBoard[i][j] = newBoard[i][j+1];
+							newBoard[i][j+1] = 0;
+							GameState newGameState = new GameState(newBoard,current,GameState.Directions.left,newBoard[i][j]);
 							
-							if (!visitedState(newValue,visitedListHead,currentRow,currentColumn)){
-								printContents(newValue);
-								System.out.println(currentRow);
-								
-								GameState newNode = new GameState();
-								newNode.state = newValue;
-								newNode.dir = "left";
-								newNode.target = newValue[i][j];
-								newNode.parent = current;
-
-								enqueueNode(top, newNode, currentRow, currentColumn);
-
-								if (solvedRowAndColumn(newValue,solution,currentRow,currentColumn)){
-									printContents(newNode.state);
-									if (currentColumn == 2){
-										newNode.end = true;
-										System.out.println("afdasdf/n"+ top.value.end);
-										printContents(top.value.state);
-										StateQueueNode sol = new StateQueueNode();
-										sol.value = newNode;
+							if (!visitedListHead.visitedState(newGameState,currentRow,currentColumn)){
+								top.enqueueNode(newGameState, currentRow, currentColumn);
+								if (newGameState.solvedRowAndColumn(currentRow,currentColumn)){
+									GameState sol = processNewState(newGameState, currentRow, currentColumn);
+									if (sol != null){
 										return sol;
-									}
-									else{	
-										StateQueueNode newBottom = new StateQueueNode();
-										StateQueueNode newTop = new StateQueueNode();
-										newBottom.value = newNode;
-										newTop.value = newNode;
-										newTop.next = newBottom;
-										
-										VisitedListNode newVisitedListHead = new VisitedListNode();
-										StateQueueNode sol;
-										
-										if (currentRow <= currentColumn) {
-											newVisitedListHead.value = stateToString(newNode.state, currentRow+1, currentColumn);
-											sol = move(newBottom, newTop, solution, newVisitedListHead, currentRow+1, currentColumn);
-										}
-										else {
-											newVisitedListHead.value = stateToString(newNode.state, currentRow, currentColumn+1);
-											sol = move(newBottom, newTop, solution, newVisitedListHead, currentRow, currentColumn+1);
-										}
-										
-										if (sol != null && sol.value.end){
-											return sol;
-										}
-										else {
-											System.out.println("Something went wrong. ");
-											System.out.println("Row: " + currentRow);
-											System.out.println("Column: " + currentColumn);
-											Scanner input = new Scanner(System.in);
-											input.nextLine();
-										}
 									}
 								}
 							}
 						}
-						if (j != c && current.state[i][j-1] != current.target){ //move right
-							newValue = arrayCopy(current.state);
-							newValue[i][j] = newValue[i][j-1];
-							newValue[i][j-1] = 0;
+						if (j != c){ //move right
+							newBoard = arrayCopy(current.state);
+							newBoard[i][j] = newBoard[i][j-1];
+							newBoard[i][j-1] = 0;
+							GameState newGameState = new GameState(newBoard,current,GameState.Directions.right,newBoard[i][j]);
 							
-							if (!visitedState(newValue,visitedListHead,currentRow,currentColumn)){
-								printContents(newValue);
-								System.out.println(currentRow);
-								
-								GameState newNode = new GameState();
-								newNode.state = newValue;
-								newNode.dir = "right";
-								newNode.target = newValue[i][j];
-								newNode.parent = current;
-
-								enqueueNode(top, newNode, currentRow, currentColumn);
-
-								if (solvedRowAndColumn(newValue,solution,currentRow,currentColumn)){
-									printContents(newNode.state);
-									if (currentColumn == 2){
-										newNode.end = true;
-										System.out.println("afdasdf/n"+ top.value.end);
-										printContents(top.value.state);
-										StateQueueNode sol = new StateQueueNode();
-										sol.value = newNode;
+							if (!visitedListHead.visitedState(newGameState,currentRow,currentColumn)){
+								top.enqueueNode(newGameState, currentRow, currentColumn);
+								if (newGameState.solvedRowAndColumn(currentRow,currentColumn)){
+									GameState sol = processNewState(newGameState, currentRow, currentColumn);
+									if (sol != null){
 										return sol;
-									}
-									else{	
-										StateQueueNode newBottom = new StateQueueNode();
-										StateQueueNode newTop = new StateQueueNode();
-										newBottom.value = newNode;
-										newTop.value = newNode;
-										newTop.next = newBottom;
-										
-										VisitedListNode newVisitedListHead = new VisitedListNode();
-										StateQueueNode sol;
-										
-										if (currentRow <= currentColumn) {
-											newVisitedListHead.value = stateToString(newNode.state, currentRow+1, currentColumn);
-											sol = move(newBottom, newTop, solution, newVisitedListHead, currentRow+1, currentColumn);
-										}
-										else {
-											newVisitedListHead.value = stateToString(newNode.state, currentRow, currentColumn+1);
-											sol = move(newBottom, newTop, solution, newVisitedListHead, currentRow, currentColumn+1);
-										}
-										
-										if (sol != null && sol.value.end){
-											return sol;
-										}
-										else {
-											System.out.println("Something went wrong. ");
-											System.out.println("Row: " + currentRow);
-											System.out.println("Column: " + currentColumn);
-											Scanner input = new Scanner(System.in);
-											input.nextLine();
-										}
 									}
 								}
 							}
@@ -352,103 +169,54 @@ public class SlidingBlockPuzzleSolver{
 				}
 			}
 			if (top.next != null){
-				top = top.next; //dequeue
+				top = top.next;
 			}
-			else{
-				bottom = null;//quit
+			else {
+				break;
 			}
 		}
-		System.out.println("no solution, " + currentRow);
-		return bottom;
+		System.out.println("No solution, " + currentRow +", "+ currentColumn);
+		return null;
 	}
 	
-	private static boolean visitedState(int[][] state, VisitedListNode visitedListHead, int currentRow, int currentColumn){
-		VisitedListNode node = visitedListHead;
-		VisitedListNode newNode;
+	/**
+	 * Starts a new search phase after a row or column has been solved.
+	 * Creates a new game state queue and visited state list, used to recursively
+	 * run the solver on the remaining unsolved portion of the puzzle.
+	 * @param newGameState The game state with the newly solved row or column
+	 * @param currentRow The row was just solved, or was solved in the previous recursion
+	 * @param currentColumn The column was just solved, or was solved in the previous recursion
+	 * @return The solved GameState if the puzzle is successfully completed
+	 * */
+	private static GameState processNewState(GameState newGameState, int currentRow, int currentColumn){
+		StateQueueNode newTop = new StateQueueNode(newGameState);
 		
-		String str = stateToString(state, currentRow, currentColumn);
+		VisitedListNode newVisitedListHead = new VisitedListNode(null);
+		GameState sol;
 		
-		int comparisonNumber = str.compareTo(visitedListHead.value);
-		
-		if (comparisonNumber == 0){
-			return true;
+		if (currentRow <= currentColumn) { //row solved. Solve a column next
+			newVisitedListHead.value = newGameState.stateToString(currentRow+1, currentColumn);
+			sol = move(newTop, newVisitedListHead, currentRow+1, currentColumn); //Run the exact same algorithm, but on a smaller version of the puzzle
 		}
-		else if (comparisonNumber < 0){
-			newNode = new VisitedListNode();
-			newNode.value = visitedListHead.value;
-			newNode.next = visitedListHead.next;
-			visitedListHead.value = str;
-			visitedListHead.next = newNode;
-			
-			return false;
-		}
-		
-		while (node.next != null){
-			comparisonNumber = str.compareTo(node.next.value);
-			if (comparisonNumber == 0){
-				return true;
-			}
-			else if (comparisonNumber < 0){ //add between current and next
-				newNode = new VisitedListNode();
-				newNode.value = str;
-				newNode.next = node.next;
-				node.next = newNode;
-				
-				return false;
-			}
-			node = node.next;
+		else { //column solved. Solve a row next
+			newVisitedListHead.value = newGameState.stateToString(currentRow, currentColumn+1);
+			sol = move(newTop, newVisitedListHead, currentRow, currentColumn+1);
 		}
 		
-		newNode = new VisitedListNode();
-		newNode.value = str;
-		newNode.next = null;
-		node.next = newNode;
-		return false;
+		if (sol != null && sol.end){
+			return sol;
+		}
+		else {
+			System.out.println("Something went wrong. ");
+			return null;
+		}
 	}
 	
-	private static void enqueueNode(StateQueueNode top, GameState newNode,  int currentRow, int currentColumn){
-		StateQueueNode newItem = new StateQueueNode();
-		newItem.value = newNode;
-		StateQueueNode node = top;
-		int stateValue = 0;
-		for (int i = 0; i < newNode.state.length; i++){
-			for (int j = 0; j < newNode.state[i].length; j++){
-				if (currentRow <= currentColumn && newNode.state[i][j] <= (currentRow+1)*4 && newNode.state[i][j] > currentRow*4){
-					stateValue = stateValue + Math.abs(j-(newNode.state[i][j]-1)%4) + Math.abs(i-(newNode.state[i][j]-1)/4);
-				}
-				else if (currentRow > currentColumn && newNode.state[i][j]%4 - 1 == currentColumn) {
-					stateValue = stateValue + Math.abs(j-(newNode.state[i][j]-1)%4) + Math.abs(i-(newNode.state[i][j]-1)/4);
-				}
-			}
-		}
-		newItem.stateValue = stateValue;
-		
-		while (node.next != null){
-			if (stateValue < node.next.stateValue){
-				newItem.next = node.next;
-				node.next = newItem;
-				return;
-			}
-			node = node.next;
-		}
-		node.next = newItem;
-	}
-	
-	private static String stateToString(int[][] state, int currentRow, int currentColumn) {
-		char[] hex = {'0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F'};
-		String s = "";
-		for (int i = 0; i <= state.length -1; i++) {
-			for (int j = 0; j <= state[i].length - 1; j++) {
-				if (state[i][j] <= (currentRow+1)*4 || (state[i][j]-1)%4 <= currentColumn)
-					s = s + hex[state[i][j]];
-				else{
-					s = s + 'X';
-				}
-			}
-		}
-		return s;
-	}
-	
+	/**
+	 * Creates a deep copy of a 2D array of integers
+	 * @param array The array to be copied
+	 * @return A deep copy of the array
+	 * */
 	private static int[][] arrayCopy(int[][] array){
 		int[][] newArray = new int[array.length][array[0].length];
 		for (int i = 0; i < array.length; i++){
@@ -459,53 +227,185 @@ public class SlidingBlockPuzzleSolver{
 		return newArray;
 	}
 	
-	private static boolean solvedRowAndColumn(int[][] state, int[][] solution, int row, int column){
-		for (int j = 0; j < state[row].length; j++){
-			if (state[row][j] != solution[row][j]){
-				return false;
-			}
+	/**
+	 * Represents a 4x4 sliding block puzzle game state.
+	 * A reference to the previous game state is kept (tree structure),
+	 * along with the number that was moved to create the current state,
+	 * and the direction that it was moved in.
+	 * */
+	private static class GameState{
+		private int[][] state;
+		private GameState parent;
+		private Directions dir;
+		private int target;
+		private boolean end;
+		
+		private enum Directions {left,right,up,down};
+		
+		private GameState(int[][] state, GameState parent, Directions dir, int target) {
+			this.state = state;
+			this.parent = parent;
+			this.dir = dir;
+			this.target = target;
+			this.end = false;
 		}
-		if (column < 0) return true;
-		for (int i = 0; i < state.length; i++){
-			if (state[i][column] != solution[i][column]){
-				return false;
-			}
-		}
-		return true;
-	}
-	
-	
-	public static void printContents(int[][] array){
-		System.out.print("{");
-		for (int i = 0; i < array.length; i++){
-			System.out.print("{");
-			for (int j = 0; j < array[i].length; j++){
-				System.out.print("'" + array[i][j] + "'");
-				if (j < array[i].length-1){
-					System.out.print(", ");
+		
+		/**
+		 * Checks if the specified row and column of a game state match the solution.
+		 * @param row The row to be checked
+		 * @param column The column to be checked
+		 * @return true if the specified rows and columns are solved, otherwise false
+		 * */
+		private boolean solvedRowAndColumn(int row, int column){
+			for (int j = 0; j < columns; j++){
+				if (this.state[row][j] != solution[row][j]){
+					return false;
 				}
 			}
-			System.out.println("}");
+			if (column < 0) return true;
+			for (int i = 0; i < rows; i++){
+				if (this.state[i][column] != solution[i][column]){
+					return false;
+				}
+			}
+			return true;
 		}
-		System.out.println("}");
-	}
-	
-	private static class GameState{
-		public int[][] state;
-		public GameState parent;
-		public String dir;
-		public int target;
-		public boolean end = false;
+		
+		/**
+		 * Creates a String representing a 4x4 sliding block puzzle game state.
+		 * Multi-digit numbers are replaced by letters to ensure uniqueness.
+		 * Numbers that will be placed (in the puzzle solution) both below the current
+		 * row and to right of the current column are ignored and replaced by Xs
+		 * @param currentRow The row that is currently being solved, or was solved in the previous recursion
+		 * @param currentColumn The column that is currently being solved, or was solved in the previous recursion
+		 * @return A string representing the game state.
+		 * */
+		private String stateToString(int currentRow, int currentColumn) {
+			char[] hex = {'0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F'};
+			String s = "";
+			for (int i = 0; i < rows; i++){
+				for (int j = 0; j <columns; j++){
+					if (this.state[i][j] <= (currentRow+1)*4 || (this.state[i][j]-1)%4 <= currentColumn)
+						s = s + hex[this.state[i][j]];
+					else{
+						s = s + 'X';
+					}
+				}
+			}
+			return s;
+		}
 	}
 
+	/*
+	 * A priority queue of game states to be searched.
+	 * Nodes are sorted by Manhattan distance. Tiles that are not part of
+	 * the row or column that is currently being solved are not considered.
+	 * */
 	private static class StateQueueNode{
-		public GameState value;
-		public int stateValue;
-		public StateQueueNode next;
+		private GameState value;
+		private int stateValue;
+		private StateQueueNode next;
+		
+		private StateQueueNode(GameState value) {
+			this.value = value;
+		}
+		
+		/**
+		 * Adds a game state node to a priority queue of game states (to be explored later).
+		 * Must be called from the top node of the game state priority queue.
+		 * @param newGameState The game state to be added
+		 * @param currentRow The row that is currently being solved, or was solved in the previous recursion
+		 * @param currentColumn The column that is currently being solved, or was solved in the previous recursion
+		 * */
+		private void enqueueNode(GameState newGameState,  int currentRow, int currentColumn){
+			StateQueueNode newNode = new StateQueueNode(newGameState);
+			StateQueueNode node = this;
+			int stateValue = 0;
+			for (int i = 0; i < rows; i++){
+				for (int j = 0; j < columns; j++){
+					if (currentRow <= currentColumn && newGameState.state[i][j] <= (currentRow+1)*4 && newGameState.state[i][j] > currentRow*4){
+						stateValue = stateValue + Math.abs(j-(newGameState.state[i][j]-1)%4) + Math.abs(i-(newGameState.state[i][j]-1)/4);
+					}
+					else if (currentRow > currentColumn && newGameState.state[i][j]%4 - 1 == currentColumn) {
+						stateValue = stateValue + Math.abs(j-(newGameState.state[i][j]-1)%4) + Math.abs(i-(newGameState.state[i][j]-1)/4);
+					}
+				}
+			}
+			newNode.stateValue = stateValue;
+			
+			while (node.next != null){
+				if (stateValue < node.next.stateValue){
+					newNode.next = node.next;
+					node.next = newNode;
+					return;
+				}
+				node = node.next;
+			}
+			node.next = newNode;
+		}
 	}
 
+	/**
+	 * A sorted linked list of game states that have already been visited.
+	 * Game states are stored as Strings, and are used to compare the nodes
+	 * and insert them in lexicographical order.
+	 * */
 	private static class VisitedListNode{
-		public String value;
-		public VisitedListNode next;
+		private String value;
+		private VisitedListNode next;
+		
+		private VisitedListNode(String value){
+			this.value = value;
+		}
+		
+		/**
+		 * Checks if a game state has been visited.
+		 * Inserts it to the sorted list if not.
+		 * Must be called from the head of the visited game states list.
+		 * @param state The game state
+		 * @param currentRow The row that is currently being solved, or was solved in the previous recursion
+		 * @param currentColumn The column that is currently being solved, or was solved in the previous recursion
+		 * @return true if the game state has been visited, otherwise false
+		 * */
+		private boolean visitedState(GameState state, int currentRow, int currentColumn){
+			VisitedListNode node = this;
+			VisitedListNode newNode;
+			
+			String str = state.stateToString(currentRow, currentColumn);
+			
+			int comparisonNumber = str.compareTo(this.value);
+			
+			if (comparisonNumber == 0){
+				return true;
+			}
+			else if (comparisonNumber < 0){
+				newNode = new VisitedListNode(this.value);
+				newNode.next = this.next;
+				this.value = str;
+				this.next = newNode;
+				
+				return false;
+			}
+			
+			while (node.next != null){
+				comparisonNumber = str.compareTo(node.next.value);
+				if (comparisonNumber == 0){
+					return true;
+				}
+				else if (comparisonNumber < 0){ //add between current and next
+					newNode = new VisitedListNode(str);
+					newNode.next = node.next;
+					node.next = newNode;
+					
+					return false;
+				}
+				node = node.next;
+			}
+			
+			newNode = new VisitedListNode(str);
+			newNode.next = null;
+			node.next = newNode;
+			return false;
+		}
 	}
 }
