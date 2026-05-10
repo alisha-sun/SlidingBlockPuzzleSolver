@@ -1,4 +1,5 @@
 import java.util.Scanner;
+import java.util.HashSet;
 /**
  * Solves a 4x4 sliding block puzzle.
  *
@@ -10,7 +11,7 @@ import java.util.Scanner;
  * distance of relevant tiles. Visited states are stored to prevent
  * the algorithm from revisiting previously explored configurations.
  * 
- * (Originally implemented November 2025; documented and revised in March 2026)
+ * (Originally implemented November 2025; documented and revised in March 2026; switched to HashSet for visited state tracking in May 2026)
  * */
 public class SlidingBlockPuzzleSolver{
 	/**
@@ -46,9 +47,11 @@ public class SlidingBlockPuzzleSolver{
 		
 		StateQueueNode top = new StateQueueNode(start);
 		
-		VisitedListNode visitedListHead = new VisitedListNode(start.stateToString(0,-1));
+		HashSet<String> visited = new HashSet<String>();
+		visited.add(start.stateToString(0,-1));
 		
-		start = move(top, visitedListHead, 0, -1); //starts with the first row
+		start = move(top, visited, 0, -1); //starts with the first row
+		
 		s = "";
 
 		while (start.parent != null){
@@ -75,7 +78,7 @@ public class SlidingBlockPuzzleSolver{
 	 * @param currentColumn The column that is currently being solved (if currentRow > currentColumn), or was solved in the previous recursion (if currentRow <= currentColumn)
 	 * @return The solved game state (GameState objects contain references to their parent state)
 	 * */
-	private static GameState move(StateQueueNode top, VisitedListNode visitedListHead, int currentRow, int currentColumn){
+	private static GameState move(StateQueueNode top, HashSet<String> visited, int currentRow, int currentColumn){
 		int c = currentColumn;
 		if (currentColumn < 0) {
 			c = 0;
@@ -107,7 +110,8 @@ public class SlidingBlockPuzzleSolver{
 							newBoard[i+1][j] = 0;
 							GameState newGameState = new GameState(newBoard,current,GameState.Directions.up,newBoard[i][j]);
 							
-							if (!visitedListHead.visitedState(newGameState,currentRow,currentColumn)){
+							if (!visited.contains(newGameState.stateToString(currentRow,currentColumn))){
+								visited.add(newGameState.stateToString(currentRow,currentColumn));
 								top.enqueueNode(newGameState, currentRow, currentColumn);
 								if (newGameState.solvedRowAndColumn(currentRow,currentColumn)){
 									GameState sol = processNewState(newGameState, currentRow, currentColumn);
@@ -123,7 +127,8 @@ public class SlidingBlockPuzzleSolver{
 							newBoard[i-1][j] = 0;
 							GameState newGameState = new GameState(newBoard,current,GameState.Directions.down,newBoard[i][j]);
 							
-							if (!visitedListHead.visitedState(newGameState,currentRow,currentColumn)){
+							if (!visited.contains(newGameState.stateToString(currentRow,currentColumn))){
+								visited.add(newGameState.stateToString(currentRow,currentColumn));
 								top.enqueueNode(newGameState, currentRow, currentColumn);
 								if (newGameState.solvedRowAndColumn(currentRow,currentColumn)){
 									GameState sol = processNewState(newGameState, currentRow, currentColumn);
@@ -139,7 +144,8 @@ public class SlidingBlockPuzzleSolver{
 							newBoard[i][j+1] = 0;
 							GameState newGameState = new GameState(newBoard,current,GameState.Directions.left,newBoard[i][j]);
 							
-							if (!visitedListHead.visitedState(newGameState,currentRow,currentColumn)){
+							if (!visited.contains(newGameState.stateToString(currentRow,currentColumn))){
+								visited.add(newGameState.stateToString(currentRow,currentColumn));
 								top.enqueueNode(newGameState, currentRow, currentColumn);
 								if (newGameState.solvedRowAndColumn(currentRow,currentColumn)){
 									GameState sol = processNewState(newGameState, currentRow, currentColumn);
@@ -155,7 +161,8 @@ public class SlidingBlockPuzzleSolver{
 							newBoard[i][j-1] = 0;
 							GameState newGameState = new GameState(newBoard,current,GameState.Directions.right,newBoard[i][j]);
 							
-							if (!visitedListHead.visitedState(newGameState,currentRow,currentColumn)){
+							if (!visited.contains(newGameState.stateToString(currentRow,currentColumn))){
+								visited.add(newGameState.stateToString(currentRow,currentColumn));
 								top.enqueueNode(newGameState, currentRow, currentColumn);
 								if (newGameState.solvedRowAndColumn(currentRow,currentColumn)){
 									GameState sol = processNewState(newGameState, currentRow, currentColumn);
@@ -191,16 +198,16 @@ public class SlidingBlockPuzzleSolver{
 	private static GameState processNewState(GameState newGameState, int currentRow, int currentColumn){
 		StateQueueNode newTop = new StateQueueNode(newGameState);
 		
-		VisitedListNode newVisitedListHead = new VisitedListNode(null);
+		HashSet<String> newVisited = new HashSet<String>();
 		GameState sol;
 		
 		if (currentRow <= currentColumn) { //row solved. Solve a column next
-			newVisitedListHead.value = newGameState.stateToString(currentRow+1, currentColumn);
-			sol = move(newTop, newVisitedListHead, currentRow+1, currentColumn); //Run the exact same algorithm, but on a smaller version of the puzzle
+			newVisited.add(newGameState.stateToString(currentRow+1, currentColumn));
+			sol = move(newTop, newVisited, currentRow+1, currentColumn); //Run the exact same algorithm, but on a smaller version of the puzzle
 		}
 		else { //column solved. Solve a row next
-			newVisitedListHead.value = newGameState.stateToString(currentRow, currentColumn+1);
-			sol = move(newTop, newVisitedListHead, currentRow, currentColumn+1);
+			newVisited.add(newGameState.stateToString(currentRow, currentColumn+1));
+			sol = move(newTop, newVisited, currentRow, currentColumn+1);
 		}
 		
 		if (sol != null && sol.end){
@@ -240,7 +247,7 @@ public class SlidingBlockPuzzleSolver{
 		private int target;
 		private boolean end;
 		
-		private enum Directions {left,right,up,down};
+		private static enum Directions {left,right,up,down};
 		
 		private GameState(int[][] state, GameState parent, Directions dir, int target) {
 			this.state = state;
@@ -342,70 +349,6 @@ public class SlidingBlockPuzzleSolver{
 				node = node.next;
 			}
 			node.next = newNode;
-		}
-	}
-
-	/**
-	 * A sorted linked list of game states that have already been visited.
-	 * Game states are stored as Strings, and are used to compare the nodes
-	 * and insert them in lexicographical order.
-	 * */
-	private static class VisitedListNode{
-		private String value;
-		private VisitedListNode next;
-		
-		private VisitedListNode(String value){
-			this.value = value;
-		}
-		
-		/**
-		 * Checks if a game state has been visited.
-		 * Inserts it to the sorted list if not.
-		 * Must be called from the head of the visited game states list.
-		 * @param state The game state
-		 * @param currentRow The row that is currently being solved, or was solved in the previous recursion
-		 * @param currentColumn The column that is currently being solved, or was solved in the previous recursion
-		 * @return true if the game state has been visited, otherwise false
-		 * */
-		private boolean visitedState(GameState state, int currentRow, int currentColumn){
-			VisitedListNode node = this;
-			VisitedListNode newNode;
-			
-			String str = state.stateToString(currentRow, currentColumn);
-			
-			int comparisonNumber = str.compareTo(this.value);
-			
-			if (comparisonNumber == 0){
-				return true;
-			}
-			else if (comparisonNumber < 0){
-				newNode = new VisitedListNode(this.value);
-				newNode.next = this.next;
-				this.value = str;
-				this.next = newNode;
-				
-				return false;
-			}
-			
-			while (node.next != null){
-				comparisonNumber = str.compareTo(node.next.value);
-				if (comparisonNumber == 0){
-					return true;
-				}
-				else if (comparisonNumber < 0){ //add between current and next
-					newNode = new VisitedListNode(str);
-					newNode.next = node.next;
-					node.next = newNode;
-					
-					return false;
-				}
-				node = node.next;
-			}
-			
-			newNode = new VisitedListNode(str);
-			newNode.next = null;
-			node.next = newNode;
-			return false;
 		}
 	}
 }
